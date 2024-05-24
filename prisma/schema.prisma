@@ -16,6 +16,7 @@ model User {
   emailVerified DateTime?
   image         String?
   phone         String?         // Added phone field
+  password      String   
   Session       Session[]
   Account       Account?
   Authenticator Authenticator[]
@@ -23,6 +24,7 @@ model User {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
+
 
 model Account {
   id                       String  @id @default(cuid())

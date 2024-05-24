@@ -1,8 +1,10 @@
+// pages/api/auth/[...nextauth].ts
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import bcrypt from "bcrypt";
 
 export default NextAuth({
   providers: [
@@ -17,11 +19,13 @@ export default NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        if (!credentials) return null;
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
 
-        if (user && user.password === credentials.password) {
+        if (user && await bcrypt.compare(credentials.password, user.password)) {
           return user;
         }
         return null;
@@ -30,12 +34,17 @@ export default NextAuth({
   ],
   adapter: PrismaAdapter(prisma),
   callbacks: {
-    async session({ session, user }) {
-      session.userId = user.id;
-      session.user.email = user.email;
+    async session({ session, token, user }) {
+      session.user = user || token.user;
       return session;
     },
-    async signIn({ user, account, profile }) {
+    async jwt({ token, user }) {
+      if (user) {
+        token.user = { id: user.id, email: user.email };
+      }
+      return token;
+    },
+    async signIn({ user, account }) {
       if (account.provider === "google") {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email },
@@ -67,11 +76,13 @@ export default NextAuth({
               refresh_token_expires_in: account.refresh_token_expires_in,
             },
           });
+          user.id = existingUser.id;
         } else {
           const newUser = await prisma.user.create({
             data: {
               email: user.email,
               name: user.name || "",
+              password: "", // Provide a default or empty password for OAuth users
               phone: null,
             },
           });
@@ -93,7 +104,6 @@ export default NextAuth({
             },
           });
 
-          // Ensure session is updated with the new user's information
           user.id = newUser.id;
         }
       }
