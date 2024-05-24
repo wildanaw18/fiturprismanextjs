@@ -1,7 +1,7 @@
 // components/ComponentLogin.tsx
 import React, { useState } from "react";
 import { Box, Grid, TextField, Typography, Button } from "@mui/material";
-import axios from "axios";
+import { signIn } from 'next-auth/react';
 import { useRouter } from "next/router";
 import Link from "next/link";
 
@@ -11,22 +11,35 @@ export default function ComponentLogin() {
   const [error, setError] = useState("");
   const router = useRouter();
 
+  const handleGoogleSignIn = async () => {
+    try {
+      const response = await signIn('google', {
+        callbackUrl: '/',
+      });
+      if (response?.error) {
+        setError("Login failed: " + response.error);
+      }
+    } catch (error) {
+      setError("An unexpected error occurred: " + error.message);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     try {
-      const response = await axios.post("/api/login", {
+      const response = await signIn('credentials', {
+        redirect: false,
         email,
         password,
       });
-      console.log(response.data);
-      router.push("/"); // Redirect to the homepage on successful login
-    } catch (error) {
-      if (error.response && error.response.data.error === "Invalid email or password") {
+      if (response?.error) {
         setError("Invalid email or password");
       } else {
-        setError("An unexpected error occurred");
+        router.push("/");
       }
+    } catch (error) {
+      setError("An unexpected error occurred");
       window.location.reload(); // Reload the page on failure
     }
   };
@@ -72,7 +85,8 @@ export default function ComponentLogin() {
             Login
           </Button>
         </Box>
-        <Link href="/register">register</Link>
+        <Button onClick={handleGoogleSignIn}>Login With Google</Button>
+        <Link href="/register">Register</Link>
       </Grid>
     </Grid>
   );
