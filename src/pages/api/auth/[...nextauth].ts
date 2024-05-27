@@ -1,4 +1,3 @@
-// pages/api/auth/[...nextauth].ts
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -11,6 +10,13 @@ export default NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: {
+        params: {
+          scope: "openid profile email",
+          access_type: "offline", // Memastikan refresh token diberikan
+          prompt: "consent", // Meminta pengguna untuk memberikan persetujuan
+        },
+      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -25,7 +31,7 @@ export default NextAuth({
           where: { email: credentials.email },
         });
 
-        if (user && await bcrypt.compare(credentials.password, user.password)) {
+        if (user && user.password && (await bcrypt.compare(credentials.password, user.password))) {
           return user;
         }
         return null;
@@ -44,7 +50,7 @@ export default NextAuth({
       }
       return token;
     },
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile, email, credentials }) {
       if (account.provider === "google") {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email },
@@ -60,6 +66,14 @@ export default NextAuth({
             },
             update: {
               userId: existingUser.id,
+              refresh_token: account.refresh_token,
+              access_token: account.access_token,
+              expires_at: account.expires_at,
+              token_type: account.token_type,
+              scope: account.scope,
+              id_token: account.id_token,
+              session_state: account.session_state,
+              refresh_token_expires_in: account.refresh_token_expires_in,
             },
             create: {
               userId: existingUser.id,
@@ -76,14 +90,14 @@ export default NextAuth({
               refresh_token_expires_in: account.refresh_token_expires_in,
             },
           });
+
           user.id = existingUser.id;
+          return true;
         } else {
           const newUser = await prisma.user.create({
             data: {
               email: user.email,
               name: user.name || "",
-              password: "", // Provide a default or empty password for OAuth users
-              phone: null,
             },
           });
 
@@ -105,6 +119,7 @@ export default NextAuth({
           });
 
           user.id = newUser.id;
+          return true;
         }
       }
       return true;
@@ -115,4 +130,9 @@ export default NextAuth({
     error: "/login?error=AccessDenied",
   },
   secret: process.env.NEXTAUTH_SECRET,
+  events: {
+    error(message) {
+      console.error("NextAuth error:", message);
+    },
+  },
 });
